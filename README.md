@@ -4,6 +4,10 @@
 
 ![Trading Monitor Pro](https://img.shields.io/badge/version-2.0-blue) ![Node.js](https://img.shields.io/badge/Node.js-18+-green) ![WebSocket](https://img.shields.io/badge/WebSocket-实时推送-orange)
 
+## 🌐 在线演示
+
+**👉 [点击访问在线演示](https://trading-monitor-herry.azurewebsites.net/)**
+
 ## 🚀 快速开始
 
 ### 安装依赖
