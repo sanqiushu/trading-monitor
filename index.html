@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Trading Monitor Pro - 实时行情</title>
     <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.min.js"></script>
     <style>
@@ -784,9 +787,6 @@
             cn_stocks: ['600519.SS', '000858.SZ', '601318.SS', '000001.SZ', '600036.SS', '002594.SZ']
         };
         
-        // 缓存已创建的卡片，避免重复渲染导致顺序变化
-        let stockListCreated = {};
-        
         // ============ 更新股票列表 ============
         function updateStockList() {
             const container = document.getElementById('stockList');
@@ -798,109 +798,73 @@
             const marketData = allData[currentMarket] || {};
             const orderList = WATCHLIST_ORDER[currentMarket] || [];
             
-            // 检查是否需要重建列表（只在切换市场或首次加载时重建）
-            const cacheKey = currentMarket;
-            if (!stockListCreated[cacheKey]) {
-                // 首次创建：按固定顺序构建股票列表
-                const stocks = [];
-                for (const symbol of orderList) {
-                    // 查找数据（可能是 symbol 或 display 名称）
-                    let data = marketData[symbol];
-                    let actualSymbol = symbol;
-                    if (!data) {
-                        // 尝试查找 display 匹配的数据
-                        for (const [key, value] of Object.entries(marketData)) {
-                            if (value.display === symbol) {
-                                data = value;
-                                actualSymbol = symbol;
-                                break;
-                            }
-                        }
-                    }
-                    if (data) {
-                        stocks.push([actualSymbol, data]);
-                    }
-                }
-                
-                if (stocks.length === 0) {
-                    container.innerHTML = '<div style="padding: 20px; color: var(--text-muted);">暂无数据</div>';
-                    return;
-                }
-                
-                container.innerHTML = stocks.map(([symbol, data]) => {
-                    const displaySymbol = data.display || symbol;
-                    const name = data.name || '';
-                    const price = realtimePrices[displaySymbol]?.price || data.currentPrice;
-                    const changePct = realtimePrices[displaySymbol]?.changePct ?? data.changePct;
-                    const isActive = currentSymbol === displaySymbol;
-                    
-                    const priceStr = currentMarket === 'crypto' 
-                        ? (price > 100 ? price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : price.toFixed(4))
-                        : price?.toFixed(2) || '--';
-                    
-                    return `
-                        <div class="stock-card ${isActive ? 'active' : ''}" data-symbol="${displaySymbol}" data-order="${orderList.indexOf(symbol)}">
-                            <div class="stock-card-header">
-                                <div class="stock-card-info">
-                                    <h4>${displaySymbol}</h4>
-                                    <span>${name}</span>
-                                </div>
-                                <div class="stock-card-price">
-                                    <div class="price-main">${priceStr}</div>
-                                    <div class="price-change ${changePct >= 0 ? 'positive' : 'negative'}">
-                                        ${changePct >= 0 ? '+' : ''}${changePct?.toFixed(2) || '--'}%
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="trade-stream"></div>
-                        </div>
-                    `;
-                }).join('');
-                
-                // 绑定点击事件
-                container.querySelectorAll('.stock-card').forEach(card => {
-                    card.addEventListener('click', () => {
-                        selectStock(card.dataset.symbol);
-                    });
-                });
-                
-                stockListCreated[cacheKey] = true;
-                
-                // 默认选中第一个
-                if (!currentSymbol && stocks.length > 0) {
-                    const firstSymbol = stocks[0][1].display || stocks[0][0];
-                    selectStock(firstSymbol);
-                }
-            } else {
-                // 列表已创建，只更新价格数据而不重建 DOM
-                container.querySelectorAll('.stock-card').forEach(card => {
-                    const symbol = card.dataset.symbol;
-                    let data = null;
-                    
-                    // 查找数据
+            // 按固定顺序构建股票列表
+            const stocks = [];
+            for (const symbol of orderList) {
+                // 查找数据（可能是 symbol 或 display 名称）
+                let data = marketData[symbol];
+                let actualSymbol = symbol;
+                if (!data) {
+                    // 尝试查找 display 匹配的数据
                     for (const [key, value] of Object.entries(marketData)) {
-                        if (value.display === symbol || key === symbol) {
+                        if (value.display === symbol) {
                             data = value;
+                            actualSymbol = symbol;
                             break;
                         }
                     }
-                    
-                    if (data) {
-                        const price = realtimePrices[symbol]?.price || data.currentPrice;
-                        const changePct = realtimePrices[symbol]?.changePct ?? data.changePct;
-                        
-                        const priceEl = card.querySelector('.price-main');
-                        const changeEl = card.querySelector('.price-change');
-                        
-                        const priceStr = currentMarket === 'crypto' 
-                            ? (price > 100 ? price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : price.toFixed(4))
-                            : price?.toFixed(2) || '--';
-                        
-                        priceEl.textContent = priceStr;
-                        changeEl.textContent = `${changePct >= 0 ? '+' : ''}${changePct?.toFixed(2) || '--'}%`;
-                        changeEl.className = `price-change ${changePct >= 0 ? 'positive' : 'negative'}`;
-                    }
+                }
+                if (data) {
+                    stocks.push([actualSymbol, data]);
+                }
+            }
+            
+            if (stocks.length === 0) {
+                container.innerHTML = '<div style="padding: 20px; color: var(--text-muted);">暂无数据</div>';
+                return;
+            }
+            
+            container.innerHTML = stocks.map(([symbol, data]) => {
+                const displaySymbol = data.display || symbol;
+                const name = data.name || '';
+                const price = realtimePrices[displaySymbol]?.price || data.currentPrice;
+                const changePct = realtimePrices[displaySymbol]?.changePct ?? data.changePct;
+                const isActive = currentSymbol === displaySymbol;
+                
+                const priceStr = currentMarket === 'crypto' 
+                    ? (price > 100 ? price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : price.toFixed(4))
+                    : price?.toFixed(2) || '--';
+                
+                return `
+                    <div class="stock-card ${isActive ? 'active' : ''}" data-symbol="${displaySymbol}">
+                        <div class="stock-card-header">
+                            <div class="stock-card-info">
+                                <h4>${displaySymbol}</h4>
+                                <span>${name}</span>
+                            </div>
+                            <div class="stock-card-price">
+                                <div class="price-main">${priceStr}</div>
+                                <div class="price-change ${changePct >= 0 ? 'positive' : 'negative'}">
+                                    ${changePct >= 0 ? '+' : ''}${changePct?.toFixed(2) || '--'}%
+                                </div>
+                            </div>
+                        </div>
+                        <div class="trade-stream"></div>
+                    </div>
+                `;
+            }).join('');
+            
+            // 绑定点击事件
+            container.querySelectorAll('.stock-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    selectStock(card.dataset.symbol);
                 });
+            });
+            
+            // 默认选中第一个
+            if (!currentSymbol && stocks.length > 0) {
+                const firstSymbol = stocks[0][1].display || stocks[0][0];
+                selectStock(firstSymbol);
             }
         }
         
@@ -981,9 +945,9 @@
                 tab.addEventListener('click', () => {
                     document.querySelectorAll('.market-tab').forEach(t => t.classList.remove('active'));
                     tab.classList.add('active');
-                    currentMarket = tab.dataset.market;
+                    const newMarket = tab.dataset.market;
+                    currentMarket = newMarket;
                     currentSymbol = null;
-                    // 不清空 tickHistory，保留各市场的历史数据
                     updateStockList();
                 });
             });
