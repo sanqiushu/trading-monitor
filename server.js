@@ -11,7 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const WebSocket = require('ws');
 
-const PORT = 8080;
+const PORT = process.env.PORT || 8080;
 
 // ============ 股票列表配置 ============
 const WATCHLIST = {
