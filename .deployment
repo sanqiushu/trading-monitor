@@ -1,0 +1,6 @@
+# Azure App Service deployment configuration
+[config]
+SCM_DO_BUILD_DURING_DEPLOYMENT=true
+
+[deploy]
+command = npm install
