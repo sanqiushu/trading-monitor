@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Monitor Pro - 实时行情</title>
+    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --border-color: #30363d;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #6e7681;
+            --green: #3fb950;
+            --red: #f85149;
+            --yellow: #d29922;
+            --blue: #58a6ff;
+            --purple: #a371f7;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+        
+        .navbar {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 12px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        
+        .navbar-brand span { color: var(--blue); }
+        
+        .navbar-status {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--green);
+            animation: pulse 1s infinite;
+        }
+        
+        .status-dot.disconnected { background: var(--red); animation: none; }
+        
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        
+        .market-tabs {
+            display: flex;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0 24px;
+        }
+        
+        .market-tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+        
+        .market-tab:hover { color: var(--text-primary); }
+        .market-tab.active {
+            color: var(--blue);
+            border-bottom-color: var(--blue);
+        }
+        
+        .main-container {
+            display: grid;
+            grid-template-columns: 400px 1fr;
+            height: calc(100vh - 100px);
+        }
+        
+        /* 实时行情面板 */
+        .realtime-panel {
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            overflow-y: auto;
+        }
+        
+        .realtime-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .realtime-header h3 {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+        
+        .tick-count {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        
+        .stock-card {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .stock-card:hover { background: var(--bg-tertiary); }
+        .stock-card.active { background: var(--bg-tertiary); border-left: 3px solid var(--blue); }
+        
+        .stock-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+        }
+        
+        .stock-card-info h4 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 2px;
+        }
+        
+        .stock-card-info span {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        
+        .stock-card-price {
+            text-align: right;
+        }
+        
+        .price-main {
+            font-size: 1.5rem;
+            font-weight: 700;
+            font-family: 'SF Mono', Monaco, monospace;
+            transition: color 0.1s;
+        }
+        
+        .price-main.flash-up { color: var(--green); }
+        .price-main.flash-down { color: var(--red); }
+        
+        .price-change {
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-top: 2px;
+        }
+        
+        .price-change.positive { color: var(--green); }
+        .price-change.negative { color: var(--red); }
+        
+        /* 实时交易流 */
+        .trade-stream {
+            max-height: 80px;
+            overflow: hidden;
+            margin-top: 8px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.7rem;
+        }
+        
+        .trade-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 2px 0;
+            opacity: 0.8;
+        }
+        
+        .trade-item.buy { color: var(--green); }
+        .trade-item.sell { color: var(--red); }
+        
+        .trade-item .time { color: var(--text-muted); }
+        
+        /* 图表区域 */
+        .chart-area {
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-primary);
+        }
+        
+        .chart-header {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--bg-secondary);
+        }
+        
+        .chart-title {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .chart-title h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        
+        .chart-title .price {
+            font-size: 2rem;
+            font-weight: 700;
+            font-family: 'SF Mono', Monaco, monospace;
+        }
+        
+        .chart-title .change {
+            font-size: 1rem;
+            padding: 4px 12px;
+            border-radius: 4px;
+        }
+        
+        .chart-title .change.positive { background: rgba(63, 185, 80, 0.15); color: var(--green); }
+        .chart-title .change.negative { background: rgba(248, 81, 73, 0.15); color: var(--red); }
+        
+        /* 实时 Tick 图 */
+        .tick-chart-container {
+            height: 200px;
+            padding: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        #tick-chart {
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* 日K图 */
+        .chart-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        #main-chart { flex: 3; }
+        #volume-chart { flex: 1; border-top: 1px solid var(--border-color); }
+        #indicator-chart { flex: 1; border-top: 1px solid var(--border-color); }
+        
+        /* 指标面板 */
+        .indicators-bar {
+            display: flex;
+            gap: 24px;
+            padding: 12px 24px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            overflow-x: auto;
+        }
+        
+        .indicator-item {
+            display: flex;
+            flex-direction: column;
+            min-width: 80px;
+        }
+        
+        .indicator-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-bottom: 2px;
+        }
+        
+        .indicator-value {
+            font-size: 0.95rem;
+            font-weight: 600;
+            font-family: 'SF Mono', Monaco, monospace;
+        }
+        
+        .indicator-value.buy { color: var(--green); }
+        .indicator-value.sell { color: var(--red); }
+        .indicator-value.neutral { color: var(--yellow); }
+        
+        /* 信号提示 */
+        .signal-banner {
+            padding: 8px 24px;
+            display: flex;
+            gap: 12px;
+            overflow-x: auto;
+            background: var(--bg-tertiary);
+        }
+        
+        .signal-tag {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            white-space: nowrap;
+        }
+        
+        .signal-tag.buy { background: rgba(63, 185, 80, 0.15); color: var(--green); }
+        .signal-tag.sell { background: rgba(248, 81, 73, 0.15); color: var(--red); }
+        
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-muted);
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border-color);
+            border-top-color: var(--blue);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        
+        @media (max-width: 900px) {
+            .main-container { grid-template-columns: 1fr; }
+            .realtime-panel { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-brand">
+            📈 <span>Trading Monitor</span> Pro
+        </div>
+        <div class="navbar-status">
+            <div class="status-dot" id="wsStatus"></div>
+            <span id="statusText">连接中...</span>
+            <span id="tickRate">0 ticks/s</span>
+        </div>
+    </nav>
+    
+    <div class="market-tabs">
+        <div class="market-tab active" data-market="crypto">₿ 加密货币 (实时)</div>
+        <div class="market-tab" data-market="us_stocks">🇺🇸 美股</div>
+        <div class="market-tab" data-market="cn_stocks">🇨🇳 A股</div>
+    </div>
+    
+    <div class="main-container">
+        <div class="realtime-panel">
+            <div class="realtime-header">
+                <h3>📡 实时行情</h3>
+                <span class="tick-count" id="totalTicks">0 ticks</span>
+            </div>
+            <div id="stockList">
+                <div class="loading"><div class="spinner"></div></div>
+            </div>
+        </div>
+        
+        <div class="chart-area">
+            <div class="chart-header">
+                <div class="chart-title">
+                    <h2 id="chartSymbol">--</h2>
+                    <span class="price" id="chartPrice">--</span>
+                    <span class="change" id="chartChange">--</span>
+                </div>
+            </div>
+            
+            <div class="indicators-bar">
+                <div class="indicator-item">
+                    <span class="indicator-label">RSI(14)</span>
+                    <span class="indicator-value" id="ind-rsi">--</span>
+                </div>
+                <div class="indicator-item">
+                    <span class="indicator-label">MACD</span>
+                    <span class="indicator-value" id="ind-macd">--</span>
+                </div>
+                <div class="indicator-item">
+                    <span class="indicator-label">MA5</span>
+                    <span class="indicator-value" id="ind-ma5">--</span>
+                </div>
+                <div class="indicator-item">
+                    <span class="indicator-label">MA20</span>
+                    <span class="indicator-value" id="ind-ma20">--</span>
+                </div>
+                <div class="indicator-item">
+                    <span class="indicator-label">布林上轨</span>
+                    <span class="indicator-value" id="ind-bb-upper">--</span>
+                </div>
+                <div class="indicator-item">
+                    <span class="indicator-label">布林下轨</span>
+                    <span class="indicator-value" id="ind-bb-lower">--</span>
+                </div>
+            </div>
+            
+            <div class="signal-banner" id="signalBanner"></div>
+            
+            <div class="tick-chart-container">
+                <div id="tick-chart"></div>
+            </div>
+            
+            <div class="chart-container">
+                <div id="main-chart"></div>
+                <div id="volume-chart"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // ============ 全局状态 ============
+        let allData = null;
+        let currentMarket = 'crypto';
+        let currentSymbol = null;
+        let ws = null;
+        let tickCount = 0;
+        let ticksPerSecond = 0;
+        let lastTickTime = Date.now();
+        
+        // 实时价格数据
+        let realtimePrices = {};
+        let tickHistory = {
+            crypto: {},
+            us_stocks: {},
+            cn_stocks: {}
+        }; // 按市场分开存储 tick 历史
+        
+        // 图表实例
+        let mainChart = null;
+        let volumeChart = null;
+        let tickChart = null;
+        let candleSeries = null;
+        let volumeSeries = null;
+        let tickSeries = null;
+        
+        // ============ WebSocket 连接 ============
+        function connectWebSocket() {
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${location.host}`);
+            
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                document.getElementById('wsStatus').classList.remove('disconnected');
+                document.getElementById('statusText').textContent = '实时连接';
+                
+                // 订阅所有symbol
+                ws.send(JSON.stringify({ type: 'subscribe', symbols: ['all'] }));
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'tick') {
+                    handleTick(data);
+                }
+            };
+            
+            ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                document.getElementById('wsStatus').classList.add('disconnected');
+                document.getElementById('statusText').textContent = '已断开';
+                
+                // 5秒后重连
+                setTimeout(connectWebSocket, 5000);
+            };
+            
+            ws.onerror = (err) => {
+                console.error('WebSocket error:', err);
+            };
+        }
+        
+        // ============ 处理实时 Tick ============
+        function handleTick(tick) {
+            tickCount++;
+            
+            // 计算 ticks/s
+            const now = Date.now();
+            if (now - lastTickTime >= 1000) {
+                ticksPerSecond = tickCount;
+                tickCount = 0;
+                lastTickTime = now;
+                document.getElementById('tickRate').textContent = `${ticksPerSecond} ticks/s`;
+                const totalTicks = Object.values(tickHistory).reduce((acc, market) => 
+                    acc + Object.values(market).reduce((a, b) => a + b.length, 0), 0);
+                document.getElementById('totalTicks').textContent = `${totalTicks} ticks`;
+            }
+            
+            const symbol = tick.symbol;
+            const price = tick.price;
+            const market = tick.market; // 'crypto', 'us_stocks', 'cn_stocks'
+            
+            // 初始化该市场的 tick 历史
+            if (!tickHistory[market]) {
+                tickHistory[market] = {};
+            }
+            if (!tickHistory[market][symbol]) {
+                tickHistory[market][symbol] = [];
+            }
+            
+            // 保存 tick（最多保留 500 个）
+            tickHistory[market][symbol].push({
+                time: tick.time,
+                price: price,
+                qty: tick.quantity,
+                side: tick.isBuyerMaker ? 'sell' : 'buy'
+            });
+            if (tickHistory[market][symbol].length > 500) {
+                tickHistory[market][symbol].shift();
+            }
+            
+            // 获取上一个价格
+            const prevPrice = realtimePrices[symbol]?.price || price;
+            const direction = price > prevPrice ? 'up' : price < prevPrice ? 'down' : 'same';
+            
+            // 更新价格缓存
+            realtimePrices[symbol] = {
+                price,
+                prevPrice,
+                direction,
+                time: tick.time,
+                change: tick.change,
+                changePct: tick.changePct,
+                marketState: tick.marketState
+            };
+            
+            // 只更新当前市场的 UI
+            if (market === currentMarket) {
+                updateStockCard(symbol, price, direction, tick);
+                
+                // 如果是当前选中的symbol，更新图表
+                if (symbol === currentSymbol) {
+                    updateTickChart(symbol);
+                    updateHeaderPrice(price, direction);
+                }
+            }
+        }
+        
+        // ============ 更新股票卡片 ============
+        function updateStockCard(symbol, price, direction, tick) {
+            const card = document.querySelector(`.stock-card[data-symbol="${symbol}"]`);
+            if (!card) return;
+            
+            const priceEl = card.querySelector('.price-main');
+            const changeEl = card.querySelector('.price-change');
+            const streamEl = card.querySelector('.trade-stream');
+            
+            // 更新价格
+            const isCrypto = currentMarket === 'crypto';
+            priceEl.textContent = isCrypto 
+                ? (price > 100 ? price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : price.toFixed(4))
+                : price.toFixed(2);
+            
+            // 闪烁效果
+            priceEl.classList.remove('flash-up', 'flash-down');
+            if (direction === 'up') {
+                priceEl.classList.add('flash-up');
+            } else if (direction === 'down') {
+                priceEl.classList.add('flash-down');
+            }
+            
+            // 更新涨跌幅
+            if (tick.changePct !== undefined) {
+                const pct = tick.changePct;
+                changeEl.textContent = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
+                changeEl.className = `price-change ${pct >= 0 ? 'positive' : 'negative'}`;
+            }
+            
+            // 更新交易流
+            if (streamEl && tick.quantity) {
+                const time = new Date(tick.time).toLocaleTimeString('zh-CN');
+                const side = tick.isBuyerMaker ? 'sell' : 'buy';
+                const tradeHtml = `<div class="trade-item ${side}">
+                    <span>${price.toFixed(2)}</span>
+                    <span>${tick.quantity.toFixed(4)}</span>
+                    <span class="time">${time}</span>
+                </div>`;
+                streamEl.innerHTML = tradeHtml + streamEl.innerHTML;
+                // 只保留最近5条
+                while (streamEl.children.length > 5) {
+                    streamEl.removeChild(streamEl.lastChild);
+                }
+            }
+        }
+        
+        // ============ 更新头部价格 ============
+        function updateHeaderPrice(price, direction) {
+            const priceEl = document.getElementById('chartPrice');
+            const isCrypto = currentMarket === 'crypto';
+            priceEl.textContent = '$' + (isCrypto 
+                ? (price > 100 ? price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : price.toFixed(4))
+                : price.toFixed(2));
+            
+            priceEl.style.color = direction === 'up' ? 'var(--green)' : direction === 'down' ? 'var(--red)' : 'var(--text-primary)';
+        }
+        
+        // ============ 初始化图表 ============
+        function initCharts() {
+            const chartOptions = {
+                layout: {
+                    background: { color: '#0d1117' },
+                    textColor: '#8b949e',
+                },
+                grid: {
+                    vertLines: { color: '#21262d' },
+                    horzLines: { color: '#21262d' },
+                },
+                crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+                rightPriceScale: { borderColor: '#30363d' },
+                timeScale: { borderColor: '#30363d', timeVisible: true },
+            };
+            
+            // Tick 图（实时价格线）
+            tickChart = LightweightCharts.createChart(document.getElementById('tick-chart'), {
+                ...chartOptions,
+                height: 168,
+            });
+            
+            tickSeries = tickChart.addLineSeries({
+                color: '#58a6ff',
+                lineWidth: 2,
+                priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+            });
+            
+            // 主图（日K）
+            mainChart = LightweightCharts.createChart(document.getElementById('main-chart'), {
+                ...chartOptions,
+            });
+            
+            candleSeries = mainChart.addCandlestickSeries({
+                upColor: '#3fb950',
+                downColor: '#f85149',
+                borderUpColor: '#3fb950',
+                borderDownColor: '#f85149',
+                wickUpColor: '#3fb950',
+                wickDownColor: '#f85149',
+            });
+            
+            // 均线
+            mainChart.maSeries = {
+                ma5: mainChart.addLineSeries({ color: '#f0b90b', lineWidth: 1 }),
+                ma10: mainChart.addLineSeries({ color: '#58a6ff', lineWidth: 1 }),
+                ma20: mainChart.addLineSeries({ color: '#a371f7', lineWidth: 1 }),
+            };
+            
+            // 成交量
+            volumeChart = LightweightCharts.createChart(document.getElementById('volume-chart'), {
+                ...chartOptions,
+            });
+            
+            volumeSeries = volumeChart.addHistogramSeries({
+                priceFormat: { type: 'volume' },
+            });
+            
+            // 同步时间轴
+            mainChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+                if (range) volumeChart.timeScale().setVisibleLogicalRange(range);
+            });
+            
+            // 响应式
+            window.addEventListener('resize', () => {
+                if (tickChart) tickChart.resize(document.getElementById('tick-chart').offsetWidth, 168);
+                if (mainChart) mainChart.resize(document.getElementById('main-chart').offsetWidth, document.getElementById('main-chart').offsetHeight);
+                if (volumeChart) volumeChart.resize(document.getElementById('volume-chart').offsetWidth, document.getElementById('volume-chart').offsetHeight);
+            });
+        }
+        
+        // ============ 更新 Tick 图 ============
+        function updateTickChart(symbol) {
+            const marketTicks = tickHistory[currentMarket] || {};
+            const ticks = marketTicks[symbol] || [];
+            
+            // 如果没有实时 tick 数据，显示空图并重置价格范围
+            if (ticks.length === 0) {
+                tickSeries.setData([]);
+                // 强制重置价格轴
+                tickChart.priceScale('right').applyOptions({
+                    autoScale: true
+                });
+                return;
+            }
+            
+            const data = ticks.map(t => ({
+                time: Math.floor(t.time / 1000),
+                value: t.price
+            }));
+            
+            // 去重时间戳（保留最新的）
+            const uniqueData = [];
+            const seen = new Set();
+            for (let i = data.length - 1; i >= 0; i--) {
+                if (!seen.has(data[i].time)) {
+                    seen.add(data[i].time);
+                    uniqueData.unshift(data[i]);
+                }
+            }
+            
+            tickSeries.setData(uniqueData);
+            tickChart.timeScale().fitContent();
+            // 强制重置价格轴以适应新数据
+            tickChart.priceScale('right').applyOptions({
+                autoScale: true
+            });
+        }
+        
+        // ============ 更新日K图 ============
+        function updateDailyChart(data) {
+            if (!data || !data.ohlcv) return;
+            
+            const timestamps = data.timestamps;
+            const { open, high, low, close, volume } = data.ohlcv;
+            
+            const candleData = timestamps.map((t, i) => ({
+                time: Math.floor(t / 1000),
+                open: open[i],
+                high: high[i],
+                low: low[i],
+                close: close[i],
+            })).filter(d => d.open && d.high && d.low && d.close);
+            
+            candleSeries.setData(candleData);
+            
+            // 均线
+            if (data.ma) {
+                const ma5Data = timestamps.map((t, i) => ({ time: Math.floor(t / 1000), value: data.ma.ma5[i] }))
+                    .filter(d => d.value !== null);
+                const ma10Data = timestamps.map((t, i) => ({ time: Math.floor(t / 1000), value: data.ma.ma10[i] }))
+                    .filter(d => d.value !== null);
+                const ma20Data = timestamps.map((t, i) => ({ time: Math.floor(t / 1000), value: data.ma.ma20[i] }))
+                    .filter(d => d.value !== null);
+                
+                mainChart.maSeries.ma5.setData(ma5Data);
+                mainChart.maSeries.ma10.setData(ma10Data);
+                mainChart.maSeries.ma20.setData(ma20Data);
+            }
+            
+            // 成交量
+            const volumeData = timestamps.map((t, i) => ({
+                time: Math.floor(t / 1000),
+                value: volume[i],
+                color: close[i] >= open[i] ? 'rgba(63, 185, 80, 0.5)' : 'rgba(248, 81, 73, 0.5)',
+            })).filter(d => d.value);
+            
+            volumeSeries.setData(volumeData);
+            
+            mainChart.timeScale().fitContent();
+            volumeChart.timeScale().fitContent();
+        }
+        
+        // ============ 更新指标面板 ============
+        function updateIndicators(data) {
+            if (!data) return;
+            
+            const rsi = data.rsi?.[data.rsi.length - 1];
+            const rsiEl = document.getElementById('ind-rsi');
+            rsiEl.textContent = rsi?.toFixed(1) || '--';
+            rsiEl.className = `indicator-value ${rsi > 70 ? 'sell' : rsi < 30 ? 'buy' : 'neutral'}`;
+            
+            const macdHist = data.macd?.histogram[data.macd.histogram.length - 1];
+            const macdEl = document.getElementById('ind-macd');
+            macdEl.textContent = macdHist?.toFixed(2) || '--';
+            macdEl.className = `indicator-value ${macdHist > 0 ? 'buy' : 'sell'}`;
+            
+            document.getElementById('ind-ma5').textContent = data.ma?.ma5[data.ma.ma5.length - 1]?.toFixed(2) || '--';
+            document.getElementById('ind-ma20').textContent = data.ma?.ma20[data.ma.ma20.length - 1]?.toFixed(2) || '--';
+            document.getElementById('ind-bb-upper').textContent = data.bollinger?.upper[data.bollinger.upper.length - 1]?.toFixed(2) || '--';
+            document.getElementById('ind-bb-lower').textContent = data.bollinger?.lower[data.bollinger.lower.length - 1]?.toFixed(2) || '--';
+        }
+        
+        // ============ 固定的监控列表顺序 ============
+        const WATCHLIST_ORDER = {
+            us_stocks: ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'TSM'],
+            crypto: ['BTC', 'ETH', 'SOL', 'BNB'],
+            cn_stocks: ['600519.SS', '000858.SZ', '601318.SS', '000001.SZ', '600036.SS', '002594.SZ']
+        };
+        
+        // 缓存已创建的卡片，避免重复渲染导致顺序变化
+        let stockListCreated = {};
+        
+        // ============ 更新股票列表 ============
+        function updateStockList() {
+            const container = document.getElementById('stockList');
+            if (!allData) {
+                container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+                return;
+            }
+            
+            const marketData = allData[currentMarket] || {};
+            const orderList = WATCHLIST_ORDER[currentMarket] || [];
+            
+            // 检查是否需要重建列表（只在切换市场或首次加载时重建）
+            const cacheKey = currentMarket;
+            if (!stockListCreated[cacheKey]) {
+                // 首次创建：按固定顺序构建股票列表
+                const stocks = [];
+                for (const symbol of orderList) {
+                    // 查找数据（可能是 symbol 或 display 名称）
+                    let data = marketData[symbol];
+                    let actualSymbol = symbol;
+                    if (!data) {
+                        // 尝试查找 display 匹配的数据
+                        for (const [key, value] of Object.entries(marketData)) {
+                            if (value.display === symbol) {
+                                data = value;
+                                actualSymbol = symbol;
+                                break;
+                            }
+                        }
+                    }
+                    if (data) {
+                        stocks.push([actualSymbol, data]);
+                    }
+                }
+                
+                if (stocks.length === 0) {
+                    container.innerHTML = '<div style="padding: 20px; color: var(--text-muted);">暂无数据</div>';
+                    return;
+                }
+                
+                container.innerHTML = stocks.map(([symbol, data]) => {
+                    const displaySymbol = data.display || symbol;
+                    const name = data.name || '';
+                    const price = realtimePrices[displaySymbol]?.price || data.currentPrice;
+                    const changePct = realtimePrices[displaySymbol]?.changePct ?? data.changePct;
+                    const isActive = currentSymbol === displaySymbol;
+                    
+                    const priceStr = currentMarket === 'crypto' 
+                        ? (price > 100 ? price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : price.toFixed(4))
+                        : price?.toFixed(2) || '--';
+                    
+                    return `
+                        <div class="stock-card ${isActive ? 'active' : ''}" data-symbol="${displaySymbol}" data-order="${orderList.indexOf(symbol)}">
+                            <div class="stock-card-header">
+                                <div class="stock-card-info">
+                                    <h4>${displaySymbol}</h4>
+                                    <span>${name}</span>
+                                </div>
+                                <div class="stock-card-price">
+                                    <div class="price-main">${priceStr}</div>
+                                    <div class="price-change ${changePct >= 0 ? 'positive' : 'negative'}">
+                                        ${changePct >= 0 ? '+' : ''}${changePct?.toFixed(2) || '--'}%
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="trade-stream"></div>
+                        </div>
+                    `;
+                }).join('');
+                
+                // 绑定点击事件
+                container.querySelectorAll('.stock-card').forEach(card => {
+                    card.addEventListener('click', () => {
+                        selectStock(card.dataset.symbol);
+                    });
+                });
+                
+                stockListCreated[cacheKey] = true;
+                
+                // 默认选中第一个
+                if (!currentSymbol && stocks.length > 0) {
+                    const firstSymbol = stocks[0][1].display || stocks[0][0];
+                    selectStock(firstSymbol);
+                }
+            } else {
+                // 列表已创建，只更新价格数据而不重建 DOM
+                container.querySelectorAll('.stock-card').forEach(card => {
+                    const symbol = card.dataset.symbol;
+                    let data = null;
+                    
+                    // 查找数据
+                    for (const [key, value] of Object.entries(marketData)) {
+                        if (value.display === symbol || key === symbol) {
+                            data = value;
+                            break;
+                        }
+                    }
+                    
+                    if (data) {
+                        const price = realtimePrices[symbol]?.price || data.currentPrice;
+                        const changePct = realtimePrices[symbol]?.changePct ?? data.changePct;
+                        
+                        const priceEl = card.querySelector('.price-main');
+                        const changeEl = card.querySelector('.price-change');
+                        
+                        const priceStr = currentMarket === 'crypto' 
+                            ? (price > 100 ? price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : price.toFixed(4))
+                            : price?.toFixed(2) || '--';
+                        
+                        priceEl.textContent = priceStr;
+                        changeEl.textContent = `${changePct >= 0 ? '+' : ''}${changePct?.toFixed(2) || '--'}%`;
+                        changeEl.className = `price-change ${changePct >= 0 ? 'positive' : 'negative'}`;
+                    }
+                });
+            }
+        }
+        
+        // ============ 选择股票 ============
+        function selectStock(symbol) {
+            currentSymbol = symbol;
+            
+            document.querySelectorAll('.stock-card').forEach(card => {
+                card.classList.toggle('active', card.dataset.symbol === symbol);
+            });
+            
+            // 找到对应数据
+            const marketData = allData?.[currentMarket] || {};
+            let data = null;
+            for (const [key, value] of Object.entries(marketData)) {
+                if (value.display === symbol || key === symbol) {
+                    data = value;
+                    break;
+                }
+            }
+            
+            if (!data) return;
+            
+            // 更新标题
+            document.getElementById('chartSymbol').textContent = symbol;
+            
+            const price = realtimePrices[symbol]?.price || data.currentPrice;
+            const priceStr = currentMarket === 'crypto' 
+                ? '$' + (price > 100 ? price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : price.toFixed(4))
+                : '$' + price?.toFixed(2);
+            document.getElementById('chartPrice').textContent = priceStr;
+            
+            const changeEl = document.getElementById('chartChange');
+            const changePct = realtimePrices[symbol]?.changePct ?? data.changePct;
+            changeEl.textContent = `${changePct >= 0 ? '+' : ''}${changePct?.toFixed(2)}%`;
+            changeEl.className = `change ${changePct >= 0 ? 'positive' : 'negative'}`;
+            
+            // 更新图表
+            updateDailyChart(data);
+            updateTickChart(symbol);
+            updateIndicators(data);
+            
+            // 更新信号
+            updateSignals(symbol);
+        }
+        
+        // ============ 更新信号 ============
+        function updateSignals(symbol) {
+            const signals = allData?.signals?.filter(s => s.symbol === symbol) || [];
+            const banner = document.getElementById('signalBanner');
+            
+            if (signals.length === 0) {
+                banner.innerHTML = '<span style="color: var(--text-muted); font-size: 0.8rem;">暂无交易信号</span>';
+                return;
+            }
+            
+            banner.innerHTML = signals.map(s => `
+                <div class="signal-tag ${s.action.toLowerCase()}">
+                    ${s.action === 'BUY' ? '📈' : '📉'} ${s.type}: ${s.desc}
+                </div>
+            `).join('');
+        }
+        
+        // ============ 获取数据 ============
+        async function fetchData() {
+            try {
+                const response = await fetch('/api/data');
+                allData = await response.json();
+                updateStockList();
+            } catch (error) {
+                console.error('Fetch error:', error);
+            }
+        }
+        
+        // ============ 事件绑定 ============
+        function bindEvents() {
+            document.querySelectorAll('.market-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.market-tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    currentMarket = tab.dataset.market;
+                    currentSymbol = null;
+                    // 不清空 tickHistory，保留各市场的历史数据
+                    updateStockList();
+                });
+            });
+        }
+        
+        // ============ 初始化 ============
+        document.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            bindEvents();
+            fetchData();
+            connectWebSocket();
+            
+            // 每30秒刷新日线数据
+            setInterval(fetchData, 30000);
+        });
+    </script>
+</body>
+</html>
