@@ -723,8 +723,9 @@
             const timestamps = data.timestamps;
             const { open, high, low, close, volume } = data.ohlcv;
             
+            // 时间戳已经是秒级（服务器统一处理）
             const candleData = timestamps.map((t, i) => ({
-                time: Math.floor(t / 1000),
+                time: t,
                 open: open[i],
                 high: high[i],
                 low: low[i],
@@ -735,11 +736,11 @@
             
             // 均线
             if (data.ma) {
-                const ma5Data = timestamps.map((t, i) => ({ time: Math.floor(t / 1000), value: data.ma.ma5[i] }))
+                const ma5Data = timestamps.map((t, i) => ({ time: t, value: data.ma.ma5[i] }))
                     .filter(d => d.value !== null);
-                const ma10Data = timestamps.map((t, i) => ({ time: Math.floor(t / 1000), value: data.ma.ma10[i] }))
+                const ma10Data = timestamps.map((t, i) => ({ time: t, value: data.ma.ma10[i] }))
                     .filter(d => d.value !== null);
-                const ma20Data = timestamps.map((t, i) => ({ time: Math.floor(t / 1000), value: data.ma.ma20[i] }))
+                const ma20Data = timestamps.map((t, i) => ({ time: t, value: data.ma.ma20[i] }))
                     .filter(d => d.value !== null);
                 
                 mainChart.maSeries.ma5.setData(ma5Data);
@@ -749,7 +750,7 @@
             
             // 成交量
             const volumeData = timestamps.map((t, i) => ({
-                time: Math.floor(t / 1000),
+                time: t,
                 value: volume[i],
                 color: close[i] >= open[i] ? 'rgba(63, 185, 80, 0.5)' : 'rgba(248, 81, 73, 0.5)',
             })).filter(d => d.value);

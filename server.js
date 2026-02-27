@@ -286,7 +286,7 @@ function generateSignals(data, symbol, name) {
 // 获取美股数据
 async function fetchUSStock(symbol) {
     try {
-        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=6mo`;
+        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=10y`;
         const data = await fetchUrl(url);
         
         if (!data.chart || !data.chart.result || !data.chart.result[0]) {
@@ -317,14 +317,15 @@ async function fetchUSStock(symbol) {
 // 获取加密货币日线数据
 async function fetchCrypto(symbol) {
     try {
-        const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1d&limit=180`;
+        const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1d&limit=1000`;
         const data = await fetchUrl(url);
         
         if (!Array.isArray(data) || data.length === 0) {
             return null;
         }
         
-        const timestamps = data.map(k => k[0]);
+        // Binance 返回毫秒级时间戳，转换为秒级以与 Yahoo Finance 统一
+        const timestamps = data.map(k => Math.floor(k[0] / 1000));
         const opens = data.map(k => parseFloat(k[1]));
         const highs = data.map(k => parseFloat(k[2]));
         const lows = data.map(k => parseFloat(k[3]));
