@@ -572,42 +572,74 @@ async function pollUSStocks() {
     }
 }
 
-// A股实时数据轮询（使用 v8 chart API）
+// A股实时数据轮询（使用新浪财经接口，更快更稳定）
 async function pollCNStocks() {
-    for (const stock of WATCHLIST.cn_stocks) {
-        try {
-            const url = `https://query1.finance.yahoo.com/v8/finance/chart/${stock.symbol}?interval=1m&range=1d`;
-            const data = await fetchUrl(url);
-            
-            if (data.chart?.result?.[0]) {
-                const result = data.chart.result[0];
-                const meta = result.meta;
-                const price = meta.regularMarketPrice;
-                const prevClose = meta.previousClose || meta.chartPreviousClose;
-                
-                if (price) {
-                    const change = prevClose ? price - prevClose : 0;
-                    const changePct = prevClose ? (change / prevClose * 100) : 0;
-                    
-                    cnStockPrices[stock.symbol] = price;
-                    
-                    const tick = {
-                        type: 'tick',
-                        market: 'cn_stocks',
-                        symbol: stock.symbol,
-                        price: price,
-                        change: change,
-                        changePct: changePct,
-                        time: Date.now(),
-                        marketState: meta.marketState
-                    };
-                    
-                    broadcast(tick);
-                }
+    try {
+        // 新浪财经接口：sh = 上海，sz = 深圳
+        const symbols = WATCHLIST.cn_stocks.map(s => {
+            // 转换 Yahoo 格式 (600519.SS) 到新浪格式 (sh600519)
+            const code = s.symbol.split('.')[0];
+            const suffix = s.symbol.split('.')[1];
+            return suffix === 'SS' ? `sh${code}` : `sz${code}`;
+        }).join(',');
+        
+        const url = `https://hq.sinajs.cn/list=${symbols}`;
+        const response = await fetch(url, {
+            headers: {
+                'Referer': 'https://finance.sina.com.cn'
             }
-        } catch (e) {
-            // 静默忽略单个股票的错误
-        }
+        });
+        const text = await response.text();
+        
+        // 解析新浪数据格式
+        // var hq_str_sh600519="贵州茅台,1665.000,1668.010,1647.010,..."
+        const lines = text.trim().split('\n');
+        
+        WATCHLIST.cn_stocks.forEach((stock, index) => {
+            const line = lines[index];
+            if (!line) return;
+            
+            const match = line.match(/="(.*)"/);
+            if (!match || !match[1]) return;
+            
+            const parts = match[1].split(',');
+            if (parts.length < 4) return;
+            
+            const name = parts[0];
+            const open = parseFloat(parts[1]);
+            const prevClose = parseFloat(parts[2]);
+            const price = parseFloat(parts[3]);
+            const high = parseFloat(parts[4]);
+            const low = parseFloat(parts[5]);
+            const volume = parseFloat(parts[8]);
+            const amount = parseFloat(parts[9]);
+            
+            if (price > 0) {
+                const change = price - prevClose;
+                const changePct = prevClose ? (change / prevClose * 100) : 0;
+                
+                cnStockPrices[stock.symbol] = price;
+                
+                const tick = {
+                    type: 'tick',
+                    market: 'cn_stocks',
+                    symbol: stock.symbol,
+                    price: price,
+                    change: change,
+                    changePct: changePct,
+                    time: Date.now(),
+                    volume: volume,
+                    amount: amount,
+                    high: high,
+                    low: low,
+                    open: open
+                };
+                
+                broadcast(tick);
+            }
+        });
+    } catch (e) {
+        // 静默忽略错误
     }
 }
 
